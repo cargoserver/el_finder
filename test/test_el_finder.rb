@@ -121,6 +121,16 @@ class TestElFinder < Test::Unit::TestCase
     assert_match(/unable/i, r1[:error])
   end
 
+  def test_multiple_mkdir
+    _, r = @elfinder.run(:cmd => 'open', :init => 'true', :target => '')
+    dirs = ['z/bar', 'z', 'z/bar/zed']
+
+    _, r1 = @elfinder.run(:cmd => 'mkdir', :current => r[:cwd][:hash], :dirs => dirs)
+    dirs.each do |dir|
+      assert File.directory?(File.join(@vroot, dir))
+    end
+  end
+
   def test_mkfile
     h, r = @elfinder.run(:cmd => 'open', :init => 'true', :target => '')
     h1, r1 = @elfinder.run(:cmd => 'mkfile', :current => r[:cwd][:hash], :name => 'file1')
@@ -160,6 +170,33 @@ class TestElFinder < Test::Unit::TestCase
     assert File.exist?(File.join(@vroot, 'philip.txt'))
     assert File.exist?(File.join(@vroot, 'sandy.txt'))
     assert_not_nil r[:select]
+  end
+
+  def test_uploads_with_destinations
+    _, r = @elfinder.run(:cmd => 'open', :init => 'true', :target => '')
+    uploads = []
+    uploads << File.open(File.join(@vroot, 'foo/philip.txt'))
+    uploads << File.open(File.join(@vroot, 'foo/sandy.txt'))
+    paths = %w[dest1 dest2]
+    paths.each { |p| FileUtils.mkdir File.join(@vroot, p) }
+
+    @elfinder.run(:cmd => 'upload', :upload => uploads, :current => r[:cwd][:hash], :upload_path => paths)
+
+    assert File.exist? File.join(@vroot, 'dest1/philip.txt')
+    assert File.exist? File.join(@vroot, 'dest2/sandy.txt')
+  end
+
+  def test_uploads_with_mtimes
+    _, r = @elfinder.run(:cmd => 'open', :init => 'true', :target => '')
+    uploads = []
+    uploads << File.open(File.join(@vroot, 'foo/philip.txt'))
+    uploads << File.open(File.join(@vroot, 'foo/sandy.txt'))
+    mtime = [1483999209, 1483999101]
+
+    @elfinder.run(:cmd => 'upload', :upload => uploads, :current => r[:cwd][:hash], :mtime => mtime)
+
+    assert File.mtime(File.join(@vroot, 'philip.txt')).to_i == mtime[0]
+    assert File.mtime(File.join(@vroot, 'sandy.txt')).to_i == mtime[1]
   end
 
   def test_upload_too_big

@@ -173,21 +173,24 @@ module ElFinder
 
     end # of open
 
-    #
     def _mkdir
       if perms_for(@current)[:write] == false
         @response[:error] = 'Access Denied'
         return
       end
 
-      dir = @current + @params[:name]
-      if !dir.exist? && dir.mkdir
-        @params[:tree] = true
-        @response[:select] = [to_hash(dir)]
-        _open(@current)
-      else
-        @response[:error] = "Unable to create folder"
+      @response[:select] = (Array(@params[:dirs]) + Array(@params[:name])).compact.sort.map do |directory|
+        dir = @current + directory
+        if !dir.exist? && dir.mkdir
+          to_hash(dir)
+        else
+          @response[:error] = "Unable to create folder #{directory}"
+          return false
+        end
       end
+
+      @params[:tree] = true
+      _open(@current)
     end # of mkdir
 
     #
@@ -233,14 +236,13 @@ module ElFinder
       end
     end # of rename
 
-    #
     def _upload
       if perms_for(@current)[:write] == false
         @response[:error] = 'Access Denied'
         return
       end
       select = []
-      @params[:upload].to_a.each do |file|
+      @params[:upload].to_a.each_with_index do |file, index|
         if file.respond_to?(:tempfile)
           the_file = file.tempfile
         else
@@ -250,17 +252,21 @@ module ElFinder
           @response[:error] ||= "Some files were not uploaded"
           @response[:errorData][@options[:original_filename_method].call(file)] = 'File exceeds the maximum allowed filesize'
         else
-          dst = @current + @options[:original_filename_method].call(file)
+          target_directory = Array(@params[:upload_path]).empty? ? '' : @params[:upload_path][index]
+          dst = @current + target_directory + @options[:original_filename_method].call(file)
           the_file.close
           src = the_file.path
           FileUtils.mv(src, dst.fullpath)
-          FileUtils.chmod @options[:upload_file_mode], dst
+          FileUtils.chmod @options[:upload_file_mode], dst.fullpath
+          unless Array(@params[:mtime]).empty?
+            FileUtils.touch dst.fullpath, mtime: Time.at(@params[:mtime][index].to_i)
+          end
           select << to_hash(dst)
         end
       end
       @response[:select] = select unless select.empty?
       _open(@current)
-    end # of upload
+    end
 
     #
     def _ping
